@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEZUO FEED MAX (AUTH FIX)</title>
+<title>NEZUO FEED MAX (FIXED AUTH)</title>
 
 <style>
 body {
@@ -114,9 +114,9 @@ button {
 
 <body>
 
-<header>NEZUO FEED MAX (AUTH FIX)</header>
+<header>NEZUO FEED MAX</header>
 
-<div id="status">認証準備中...</div>
+<div id="status">初期化中...</div>
 <div id="feed"></div>
 
 <div id="inputArea">
@@ -142,18 +142,21 @@ import {
 import {
   getAuth,
   signInAnonymously,
-  onAuthStateChanged
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDQMt9IbdNAkozbobhnXQ8Xp__C8ApmlM",
+  apiKey: "AIzaSyDQMt9IbdNAkozbobhnQXy8Xp__C8ApmlM",
   authDomain: "nezuofeed.firebaseapp.com",
   databaseURL: "https://nezuofeed-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "nezuofeed",
   storageBucket: "nezuofeed.firebasestorage.app",
   messagingSenderId: "518954118208",
-  appId: "1:518954118208:web:1c560418c274732c4d83a5"
+  appId: "1:518954118208:web:1c560418c274732c4d83a5",
+  measurementId: "G-W0XKB10WH6"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -167,7 +170,7 @@ let firebaseUID = null;
 let nezuoId = null;
 let isReady = false;
 
-/* ================= UID生成 ================= */
+/* ================= UID ================= */
 function generateNezuoId(){
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let id = "NEZUO-";
@@ -177,44 +180,59 @@ function generateNezuoId(){
   return id;
 }
 
-/* ================= AUTH（安定版） ================= */
+/* ================= AUTH ================= */
 async function initAuth(){
   try {
+    await setPersistence(auth, browserLocalPersistence);
+
     await signInAnonymously(auth);
+
   } catch (e) {
+    console.error(e);
     document.getElementById("status").textContent =
-      "認証エラー";
+      "認証失敗（APIキー or 設定確認）";
   }
 }
 
 initAuth();
 
-/* ================= 認証監視 ================= */
+/* ================= STATE ================= */
 onAuthStateChanged(auth, async (user) => {
-  if (!user) return;
+  if (!user) {
+    document.getElementById("status").textContent = "未ログイン";
+    return;
+  }
 
   firebaseUID = user.uid;
 
-  const snap = await get(child(usersRef, firebaseUID));
+  try {
+    const snap = await get(child(ref(db), `users/${firebaseUID}`));
 
-  if (snap.exists()) {
-    nezuoId = snap.val().nezuoId;
-  } else {
-    nezuoId = generateNezuoId();
-    await set(ref(db, `users/${firebaseUID}`), {
-      nezuoId,
-      createdAt: Date.now(),
-      banned: false
-    });
+    if (snap.exists()) {
+      nezuoId = snap.val().nezuoId;
+    } else {
+      nezuoId = generateNezuoId();
+
+      await set(ref(db, `users/${firebaseUID}`), {
+        nezuoId,
+        createdAt: Date.now(),
+        banned: false
+      });
+    }
+
+    isReady = true;
+
+    document.getElementById("status").textContent =
+      `OK | NEZUO ID: ${nezuoId}`;
+
+  } catch (e) {
+    console.error(e);
+    document.getElementById("status").textContent =
+      "DBエラー";
   }
-
-  isReady = true;
-
-  document.getElementById("status").textContent =
-    `NEZUO ID: ${nezuoId} ｜ UID: ${firebaseUID}`;
 });
 
-/* ================= RENDER ================= */
+/* ================= FEED ================= */
 const feed = document.getElementById("feed");
 
 function render(data){
@@ -234,13 +252,8 @@ function render(data){
           <div class="title">${m.title || "無題"}</div>
           <div class="meta">${m.nezuoId || "unknown"} • ${new Date(m.time).toLocaleString()}</div>
         </div>
-
-        <button class="delBtn"
-          onclick="event.stopPropagation(); del('${id}')">
-          削除
-        </button>
+        <button class="delBtn" onclick="event.stopPropagation(); del('${id}')">削除</button>
       </div>
-
       <div class="msg-body">${m.text || ""}</div>
     `;
 
@@ -254,7 +267,7 @@ onValue(chatRef, (snap)=>{
 
 /* ================= SEND ================= */
 window.send = () => {
-  if (!isReady || !nezuoId) return;
+  if (!isReady || !firebaseUID) return;
 
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
