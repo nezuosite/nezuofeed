@@ -3,107 +3,96 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEZUO FEED</title>
+<title>NEZUO FEED DEBUG</title>
 
 <style>
-  body {
-    margin: 0;
-    font-family: system-ui;
-    background: #0f172a;
-    color: #e2e8f0;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-  }
+body {
+  margin: 0;
+  font-family: system-ui;
+  background: #0f172a;
+  color: #e2e8f0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
 
-  header {
-    padding: 10px;
-    background: #111827;
-    text-align: center;
-    font-weight: bold;
-  }
+header {
+  padding: 10px;
+  background: #111827;
+  text-align: center;
+  font-weight: bold;
+}
 
-  #status {
-    padding: 6px 10px;
-    font-size: 12px;
-    background: #0b1220;
-    color: #93c5fd;
-  }
+#status {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: #0b1220;
+  color: #93c5fd;
+}
 
-  #feed {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-bottom: 140px;
-  }
+#feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 140px;
+}
 
-  .msg {
-    background: #111827;
-    border: 1px solid #1f2937;
-    border-radius: 10px;
-    padding: 8px;
-  }
+.msg {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 8px;
+}
 
-  .msg-header {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
+.msg-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
 
-  .title { font-weight: bold; }
-  .meta { font-size: 11px; color: #64748b; }
+.title { font-weight: bold; }
+.meta { font-size: 11px; color: #64748b; }
 
-  .msg-body { white-space: pre-wrap; }
+#inputArea {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #111827;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
-  .delBtn {
-    background: #dc2626;
-    border: none;
-    color: white;
-    padding: 3px 6px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
+input, textarea {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
 
-  #inputArea {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #111827;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  input, textarea {
-    width: 100%;
-    border: none;
-    border-radius: 8px;
-    padding: 10px;
-    background: #0f172a;
-    color: #e2e8f0;
-    box-sizing: border-box;
-  }
-
-  button {
-    padding: 10px;
-    background: #2563eb;
-    border: none;
-    color: white;
-    border-radius: 8px;
-    cursor: pointer;
-  }
+button {
+  padding: 10px;
+  background: #2563eb;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
 </style>
 </head>
 
 <body>
 
-<header>NEZUO FEED (OPEN)</header>
-<div id="status">認証中...</div>
+<header>NEZUO FEED DEBUG MODE</header>
+
+<div id="status">起動中...</div>
 <div id="feed"></div>
 
 <div id="inputArea">
@@ -135,8 +124,7 @@ const firebaseConfig = {
   projectId: "nezuofeed",
   storageBucket: "nezuofeed.firebasestorage.app",
   messagingSenderId: "518954118208",
-  appId: "1:518954118208:web:1c560418c274732c4d83a5",
-  measurementId: "G-W0XKB10WH6"
+  appId: "1:518954118208:web:1c560418c274732c4d83a5"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -146,33 +134,54 @@ const chatRef = ref(db, "chat/messages");
 
 let uid = null;
 
-/* -----------------------------
-   UIDキャッシュ（UX改善）
-------------------------------*/
-const cachedUid = localStorage.getItem("uid_cache");
-if (cachedUid) {
-  document.getElementById("status").textContent = "UID: " + cachedUid + " (cached)";
+/* ---------------------------
+   file://チェック
+----------------------------*/
+if (location.protocol === "file:") {
+  document.getElementById("status").textContent =
+    "⚠ file://では動作不安定です（localhost推奨）";
 }
 
-/* -----------------------------
-   匿名認証 + UID固定
-------------------------------*/
+/* ---------------------------
+   キャッシュUID
+----------------------------*/
+const cached = localStorage.getItem("uid_cache");
+if (cached) {
+  document.getElementById("status").textContent =
+    "UID (cached): " + cached;
+}
+
+/* ---------------------------
+   匿名認証
+----------------------------*/
+const auth = getAuth(app);
+
+signInAnonymously(auth)
+  .catch((e) => {
+    console.error("AUTH ERROR:", e.code, e.message);
+    document.getElementById("status").textContent =
+      "認証エラー: " + e.code;
+  });
+
 onAuthStateChanged(auth, (user) => {
+  console.log("AUTH STATE:", user);
+
   if (user) {
     uid = user.uid;
 
-    // キャッシュ保存
     localStorage.setItem("uid_cache", uid);
 
-    document.getElementById("status").textContent = "UID: " + uid;
+    document.getElementById("status").textContent =
+      "UID: " + uid;
   } else {
-    signInAnonymously(auth);
+    document.getElementById("status").textContent =
+      "未ログイン状態";
   }
 });
 
-/* -----------------------------
-   取得
-------------------------------*/
+/* ---------------------------
+   投稿取得
+----------------------------*/
 onValue(chatRef, (snap) => {
   const data = snap.val();
   const feed = document.getElementById("feed");
@@ -193,31 +202,32 @@ onValue(chatRef, (snap) => {
         <div class="msg-header">
           <div>
             <div class="title">${m.title || "無題"}</div>
-            <div class="meta">${m.uid || "unknown"}</div>
+            <div class="meta">${m.uid}</div>
           </div>
 
           ${isMine ? `
-            <button class="delBtn" onclick="delMsg('${id}', '${m.uid}')">
-              削除
-            </button>
+            <button onclick="delMsg('${id}','${m.uid}')">削除</button>
           ` : ""}
         </div>
-
-        <div class="msg-body">${m.text}</div>
+        <div>${m.text}</div>
       `;
 
       feed.appendChild(div);
     });
 });
 
-/* -----------------------------
+/* ---------------------------
    投稿
-------------------------------*/
+----------------------------*/
 document.getElementById("sendBtn").onclick = () => {
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
 
-  if (!text || !uid) return;
+  if (!text) return;
+  if (!uid) {
+    alert("まだ認証中です");
+    return;
+  }
 
   push(chatRef, {
     title,
@@ -230,16 +240,14 @@ document.getElementById("sendBtn").onclick = () => {
   document.getElementById("text").value = "";
 };
 
-/* -----------------------------
+/* ---------------------------
    削除
-------------------------------*/
+----------------------------*/
 window.delMsg = (id, ownerUid) => {
   if (ownerUid !== uid) {
-    alert("自分の投稿のみ削除できます");
+    alert("自分の投稿のみ削除可能");
     return;
   }
-
-  if (!confirm("削除しますか？")) return;
 
   remove(ref(db, "chat/messages/" + id));
 };
