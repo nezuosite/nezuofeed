@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEZUO FEED DEBUG</title>
+<title>NEZUO FEED DEBUG FIX</title>
 
 <style>
 body {
@@ -90,7 +90,7 @@ button {
 
 <body>
 
-<header>NEZUO FEED DEBUG MODE</header>
+<header>NEZUO FEED DEBUG FIX</header>
 
 <div id="status">起動中...</div>
 <div id="feed"></div>
@@ -117,8 +117,11 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
+/* ---------------------------
+   Firebase設定
+----------------------------*/
 const firebaseConfig = {
-  apiKey: "AIzaSyDQMt9IbdNAkozbobhnXy8X8p__C8ApmlM",
+  apiKey: "AIzaSyDQMt9IbdNAkozbobhnXQy8X8p__C8ApmlM",
   authDomain: "nezuofeed.firebaseapp.com",
   databaseURL: "https://nezuofeed-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "nezuofeed",
@@ -127,64 +130,51 @@ const firebaseConfig = {
   appId: "1:518954118208:web:1c560418c274732c4d83a5"
 };
 
+/* ---------------------------
+   初期化
+----------------------------*/
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+
 const chatRef = ref(db, "chat/messages");
 
 let uid = null;
 
 /* ---------------------------
-   file://チェック
+   状態表示
 ----------------------------*/
-if (location.protocol === "file:") {
-  document.getElementById("status").textContent =
-    "⚠ file://では動作不安定です（localhost推奨）";
-}
-
-/* ---------------------------
-   キャッシュUID
-----------------------------*/
-const cached = localStorage.getItem("uid_cache");
-if (cached) {
-  document.getElementById("status").textContent =
-    "UID (cached): " + cached;
-}
+const status = document.getElementById("status");
 
 /* ---------------------------
    匿名認証
 ----------------------------*/
-const auth = getAuth(app);
-
 signInAnonymously(auth)
+  .then(() => {
+    status.textContent = "匿名認証リクエスト成功";
+  })
   .catch((e) => {
-    console.error("AUTH ERROR:", e.code, e.message);
-    document.getElementById("status").textContent =
-      "認証エラー: " + e.code;
+    console.error(e);
+    status.textContent = "認証エラー: " + e.code;
   });
 
 onAuthStateChanged(auth, (user) => {
-  console.log("AUTH STATE:", user);
-
   if (user) {
     uid = user.uid;
-
+    status.textContent = "UID: " + uid;
     localStorage.setItem("uid_cache", uid);
-
-    document.getElementById("status").textContent =
-      "UID: " + uid;
   } else {
-    document.getElementById("status").textContent =
-      "未ログイン状態";
+    status.textContent = "未ログイン";
   }
 });
 
 /* ---------------------------
-   投稿取得
+   投稿表示
 ----------------------------*/
 onValue(chatRef, (snap) => {
   const data = snap.val();
   const feed = document.getElementById("feed");
+
   feed.innerHTML = "";
 
   if (!data) return;
@@ -193,21 +183,19 @@ onValue(chatRef, (snap) => {
     .sort((a, b) => b[1].time - a[1].time)
     .forEach(([id, m]) => {
 
-      const isMine = m.uid === uid;
-
       const div = document.createElement("div");
       div.className = "msg";
+
+      const isMine = m.uid === uid;
 
       div.innerHTML = `
         <div class="msg-header">
           <div>
             <div class="title">${m.title || "無題"}</div>
-            <div class="meta">${m.uid}</div>
+            <div class="meta">${m.uid || "unknown"}</div>
           </div>
 
-          ${isMine ? `
-            <button onclick="delMsg('${id}','${m.uid}')">削除</button>
-          ` : ""}
+          ${isMine ? `<button onclick="delMsg('${id}')">削除</button>` : ""}
         </div>
         <div>${m.text}</div>
       `;
@@ -224,16 +212,17 @@ document.getElementById("sendBtn").onclick = () => {
   const text = document.getElementById("text").value;
 
   if (!text) return;
+
   if (!uid) {
-    alert("まだ認証中です");
+    alert("認証待ちです");
     return;
   }
 
   push(chatRef, {
     title,
     text,
-    time: Date.now(),
-    uid
+    uid,
+    time: Date.now()
   });
 
   document.getElementById("title").value = "";
@@ -243,14 +232,10 @@ document.getElementById("sendBtn").onclick = () => {
 /* ---------------------------
    削除
 ----------------------------*/
-window.delMsg = (id, ownerUid) => {
-  if (ownerUid !== uid) {
-    alert("自分の投稿のみ削除可能");
-    return;
-  }
-
+window.delMsg = (id) => {
   remove(ref(db, "chat/messages/" + id));
 };
+
 </script>
 
 </body>
