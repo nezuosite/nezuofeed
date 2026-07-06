@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEZUO FEED REALTIME CMS</title>
+<title>NEZUO FEED STABLE</title>
 
 <style>
 body {
@@ -38,7 +38,7 @@ header {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-bottom: 180px;
+  padding-bottom: 160px;
 }
 
 .msg {
@@ -72,15 +72,6 @@ header {
   display: block;
 }
 
-.delBtn {
-  background: #dc2626;
-  border: none;
-  color: white;
-  font-size: 11px;
-  padding: 3px 6px;
-  border-radius: 4px;
-}
-
 #inputArea {
   position: fixed;
   bottom: 0;
@@ -88,7 +79,7 @@ header {
   right: 0;
   background: #111827;
   padding: 8px;
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 6px;
   border-top: 1px solid #1f2937;
@@ -113,7 +104,6 @@ button {
   border-radius: 8px;
 }
 
-/* UID表示ボタン */
 #copyBtn {
   position: fixed;
   top: 60px;
@@ -130,7 +120,7 @@ button {
 
 <body>
 
-<header>NEZUO FEED CMS</header>
+<header>NEZUO FEED STABLE</header>
 
 <div id="uidBar">UID: loading...</div>
 <button id="copyBtn" onclick="copyUID()">UIDコピー</button>
@@ -150,7 +140,6 @@ import {
   ref,
   push,
   onValue,
-  remove,
   update
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -169,31 +158,34 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const chatRef = ref(db, "chat/messages");
 
-/* ================= UID（固定端末ID） ================= */
+/* ================= UID（完全安定版） ================= */
 function getUID() {
-  let uid = localStorage.getItem("uid");
+  try {
+    let uid =
+      localStorage.getItem("uid") ||
+      sessionStorage.getItem("uid");
 
-  if (!uid) {
-    uid = crypto.randomUUID();
-    localStorage.setItem("uid", uid);
+    if (!uid) {
+      uid =
+        crypto.randomUUID() +
+        "-" +
+        Math.random().toString(36).slice(2);
+
+      localStorage.setItem("uid", uid);
+      sessionStorage.setItem("uid", uid);
+    }
+
+    return uid;
+  } catch (e) {
+    return "guest-" + Math.random().toString(36).slice(2);
   }
-
-  return uid;
-}
-
-/* ================= ADMIN ================= */
-const ADMIN_UID = "PUT_YOUR_UID_HERE";
-
-function isAdmin() {
-  return getUID() === ADMIN_UID;
 }
 
 /* ================= UID表示 ================= */
 function showUID() {
   document.getElementById("uidBar").textContent =
-    "UID: " + getUID() + (isAdmin() ? " ｜ ADMIN" : "");
+    "UID: " + getUID();
 }
-
 showUID();
 
 /* ================= COPY UID ================= */
@@ -216,22 +208,17 @@ function render(data){
     div.className = "msg";
     div.classList.toggle("open", !m.collapsed);
 
+    const uid = m.uid || "unknown";
+
     div.innerHTML = `
       <div class="msg-header" onclick="toggle('${id}', ${m.collapsed})">
         <div>
           <div class="title">${m.title || "無題"}</div>
-          <div class="meta">${m.uid || "guest"} • ${new Date(m.time).toLocaleString()}</div>
+          <div class="meta">${uid} • ${new Date(m.time).toLocaleString()}</div>
         </div>
-
-        ${isAdmin() ? `
-          <button class="delBtn"
-            onclick="event.stopPropagation(); del('${id}')">
-            削除
-          </button>
-        ` : ""}
       </div>
 
-      <div class="msg-body">${m.text}</div>
+      <div class="msg-body">${m.text || ""}</div>
     `;
 
     feed.appendChild(div);
@@ -239,25 +226,26 @@ function render(data){
 }
 
 onValue(chatRef, (snap)=>{
-  render(snap.val());
+  try {
+    render(snap.val());
+  } catch (e) {
+    console.error("render error:", e);
+  }
 });
 
-/* ================= SEND ================= */
+/* ================= SEND（全員OK） ================= */
 window.send = () => {
-  if (!isAdmin()) {
-    alert("管理者のみ投稿可能");
-    return;
-  }
-
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
 
   if (!text) return;
 
+  const uid = getUID();
+
   push(chatRef, {
     title: title || "無題",
-    text,
-    uid: getUID(),
+    text: text,
+    uid: uid,
     time: Date.now(),
     collapsed: true
   });
@@ -271,12 +259,6 @@ window.toggle = (id,current)=>{
   update(ref(db, `chat/messages/${id}`), {
     collapsed: !current
   });
-};
-
-/* ================= DELETE ================= */
-window.del = (id)=>{
-  if(!isAdmin()) return;
-  remove(ref(db, `chat/messages/${id}`));
 };
 </script>
 
