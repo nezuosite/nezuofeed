@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEZUO FEED</title>
+<title>NEZUO FEED SECURE</title>
 
 <style>
 body {
@@ -22,6 +22,13 @@ header {
   background: #111827;
   text-align: center;
   font-weight: bold;
+}
+
+#status {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: #0b1220;
+  color: #93c5fd;
 }
 
 #feed {
@@ -110,7 +117,9 @@ button {
 
 <body>
 
-<header>NEZUO FEED</header>
+<header>NEZUO FEED SECURE</header>
+
+<div id="status">認証中...</div>
 
 <div id="feed"></div>
 
@@ -131,6 +140,12 @@ import {
   update
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
 /* ================= Firebase ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyDQMt9IbdNAkozbobhnXQ8Xp__C8ApmlM",
@@ -146,30 +161,30 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const chatRef = ref(db, "chat/messages");
 
-/* ================= UID（管理者固定端末対応） ================= */
-function getUID() {
-  let uid = localStorage.getItem("uid");
+/* ================= AUTH（匿名認証） ================= */
+const auth = getAuth(app);
 
-  if (!uid) {
-    const ADMIN_DEVICE = true; 
-    uid = ADMIN_DEVICE
-      ? "JO9YQ7RM"
-      : crypto.randomUUID();
+signInAnonymously(auth);
 
-    localStorage.setItem("uid", uid);
-    sessionStorage.setItem("uid", uid);
-  }
+/* 管理者UID（Firebaseで取得したものをここに入れる） */
+const ADMIN_UID = "YOUR_ADMIN_UID_HERE";
 
-  return uid;
-}
+let myUID = null;
+let isAdmin = false;
 
-/* ================= 管理者判定 ================= */
-const ADMIN_UID = "JO9YQ7RM";
-const ADMIN_NAME = "ねづお";
+/* ================= AUTH監視 ================= */
+onAuthStateChanged(auth, (user) => {
+  if (!user) return;
 
-function isAdmin() {
-  return getUID() === ADMIN_UID;
-}
+  myUID = user.uid;
+  isAdmin = (myUID === ADMIN_UID);
+
+  document.getElementById("status").textContent =
+    "UID: " + myUID + (isAdmin ? " ｜ ADMIN" : " ｜ USER");
+
+  document.getElementById("inputArea").style.display =
+    isAdmin ? "flex" : "none";
+});
 
 /* ================= RENDER ================= */
 const feed = document.getElementById("feed");
@@ -185,16 +200,14 @@ function render(data){
     div.className = "msg";
     div.classList.toggle("open", !m.collapsed);
 
-    const uid = m.uid || "unknown";
-
     div.innerHTML = `
       <div class="msg-header" onclick="toggle('${id}', ${m.collapsed})">
         <div>
           <div class="title">${m.title || "無題"}</div>
-          <div class="meta">${uid} • ${new Date(m.time).toLocaleString()}</div>
+          <div class="meta">${m.uid || "unknown"} • ${new Date(m.time).toLocaleString()}</div>
         </div>
 
-        ${isAdmin() ? `
+        ${isAdmin ? `
           <button class="delBtn"
             onclick="event.stopPropagation(); del('${id}')">
             削除
@@ -215,10 +228,7 @@ onValue(chatRef, (snap)=>{
 
 /* ================= SEND（管理者のみ） ================= */
 window.send = () => {
-  if (!isAdmin()) {
-    alert("管理者のみ投稿できます");
-    return;
-  }
+  if (!isAdmin) return;
 
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
@@ -228,7 +238,7 @@ window.send = () => {
   push(chatRef, {
     title: title || "無題",
     text,
-    uid: ADMIN_NAME,
+    uid: "ねづお",
     time: Date.now(),
     collapsed: true
   });
@@ -238,13 +248,13 @@ window.send = () => {
 };
 
 /* ================= DELETE ================= */
-window.del = (id)=>{
-  if(!isAdmin()) return;
+window.del = (id) => {
+  if (!isAdmin) return;
   remove(ref(db, `chat/messages/${id}`));
 };
 
 /* ================= TOGGLE ================= */
-window.toggle = (id,current)=>{
+window.toggle = (id, current) => {
   update(ref(db, `chat/messages/${id}`), {
     collapsed: !current
   });
