@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NEZUO FEED MAX (FIXED AUTH)</title>
+<title>NEZUO FEED ADMIN ONLY</title>
 
 <style>
 body {
@@ -114,7 +114,7 @@ button {
 
 <body>
 
-<header>NEZUO FEED MAX</header>
+<header>NEZUO FEED (ADMIN ONLY)</header>
 
 <div id="status">初期化中...</div>
 <div id="feed"></div>
@@ -122,7 +122,7 @@ button {
 <div id="inputArea">
   <input id="title" placeholder="タイトル" />
   <textarea id="text" placeholder="メッセージ入力"></textarea>
-  <button onclick="send()">投稿</button>
+  <button onclick="send()">投稿（管理者のみ）</button>
 </div>
 
 <script type="module">
@@ -166,31 +166,22 @@ const auth = getAuth(app);
 const chatRef = ref(db, "chat/messages");
 const usersRef = ref(db, "users");
 
-let firebaseUID = null;
-let nezuoId = null;
-let isReady = false;
+/* ================= ADMIN ================= */
+const ADMIN_UID = "7VVG6R";
+const ADMIN_NAME = "ねづお";
 
-/* ================= UID ================= */
-function generateNezuoId(){
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let id = "NEZUO-";
-  for(let i=0;i<6;i++){
-    id += chars[Math.floor(Math.random()*chars.length)];
-  }
-  return id;
-}
+let firebaseUID = null;
+let isReady = false;
 
 /* ================= AUTH ================= */
 async function initAuth(){
   try {
     await setPersistence(auth, browserLocalPersistence);
-
     await signInAnonymously(auth);
-
   } catch (e) {
     console.error(e);
     document.getElementById("status").textContent =
-      "認証失敗（APIキー or 設定確認）";
+      "認証失敗";
   }
 }
 
@@ -198,38 +189,15 @@ initAuth();
 
 /* ================= STATE ================= */
 onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    document.getElementById("status").textContent = "未ログイン";
-    return;
-  }
+  if (!user) return;
 
   firebaseUID = user.uid;
+  isReady = true;
 
-  try {
-    const snap = await get(child(ref(db), `users/${firebaseUID}`));
-
-    if (snap.exists()) {
-      nezuoId = snap.val().nezuoId;
-    } else {
-      nezuoId = generateNezuoId();
-
-      await set(ref(db, `users/${firebaseUID}`), {
-        nezuoId,
-        createdAt: Date.now(),
-        banned: false
-      });
-    }
-
-    isReady = true;
-
-    document.getElementById("status").textContent =
-      `OK | NEZUO ID: ${nezuoId}`;
-
-  } catch (e) {
-    console.error(e);
-    document.getElementById("status").textContent =
-      "DBエラー";
-  }
+  document.getElementById("status").textContent =
+    firebaseUID === ADMIN_UID
+      ? `管理者ログイン：ねづお`
+      : `閲覧モード（投稿不可）`;
 });
 
 /* ================= FEED ================= */
@@ -250,10 +218,18 @@ function render(data){
       <div class="msg-header" onclick="toggle('${id}', ${m.collapsed})">
         <div>
           <div class="title">${m.title || "無題"}</div>
-          <div class="meta">${m.nezuoId || "unknown"} • ${new Date(m.time).toLocaleString()}</div>
+          <div class="meta">
+            ${m.uid === ADMIN_UID ? "ねづお（管理者）" : "閲覧ユーザー"}
+            • ${new Date(m.time).toLocaleString()}
+          </div>
         </div>
-        <button class="delBtn" onclick="event.stopPropagation(); del('${id}')">削除</button>
+
+        <button class="delBtn"
+          onclick="event.stopPropagation(); del('${id}')">
+          削除
+        </button>
       </div>
+
       <div class="msg-body">${m.text || ""}</div>
     `;
 
@@ -267,7 +243,7 @@ onValue(chatRef, (snap)=>{
 
 /* ================= SEND ================= */
 window.send = () => {
-  if (!isReady || !firebaseUID) return;
+  if (!isReady || firebaseUID !== ADMIN_UID) return;
 
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
@@ -278,7 +254,7 @@ window.send = () => {
     title: title || "無題",
     text,
     uid: firebaseUID,
-    nezuoId,
+    nezuoId: ADMIN_NAME,
     time: Date.now(),
     collapsed: true
   });
@@ -289,6 +265,7 @@ window.send = () => {
 
 /* ================= DELETE ================= */
 window.del = (id) => {
+  if (firebaseUID !== ADMIN_UID) return;
   remove(ref(db, `chat/messages/${id}`));
 };
 
