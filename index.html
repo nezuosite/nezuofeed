@@ -115,7 +115,7 @@ button {
 
 <header>NEZUO FEED FINAL</header>
 
-<div id="status">認証中...</div>
+<div id="status">接続中...</div>
 <div id="feed"></div>
 
 <div id="inputArea">
@@ -142,7 +142,7 @@ import {
 
 /* ================= Firebase ================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyDQMt9IbdNAkozbobhnQXy8Xp__C8ApmlM",
+  apiKey: "AIzaSyDQMt9IbdNAkozbobhnXy8Xp__C8ApmlM",
   authDomain: "nezuofeed.firebaseapp.com",
   databaseURL: "https://nezuofeed-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "nezuofeed",
@@ -157,7 +157,7 @@ const auth = getAuth(app);
 
 const chatRef = ref(db, "chat/messages");
 
-/* ================= AUTH ================= */
+/* ================= AUTH（匿名は維持） ================= */
 let authUid = null;
 
 signInAnonymously(auth);
@@ -166,11 +166,11 @@ onAuthStateChanged(auth, (user) => {
   if (!user) return;
   authUid = user.uid;
 
-  document.getElementById("status").innerHTML =
-    `UID: ${authUid}`;
+  document.getElementById("status").textContent =
+    "UID: " + authUid;
 });
 
-/* ================= PUBLIC UID ================= */
+/* ================= PUBLIC ID ================= */
 let publicId = localStorage.getItem("publicId");
 
 if (!publicId) {
@@ -178,7 +178,7 @@ if (!publicId) {
   localStorage.setItem("publicId", publicId);
 }
 
-/* ================= FEED ================= */
+/* ================= RENDER ================= */
 const feed = document.getElementById("feed");
 
 function render(data){
@@ -192,19 +192,18 @@ function render(data){
     div.className = "msg";
     div.classList.toggle("open", !m.collapsed);
 
+    const canDelete = m.authUid === authUid;
+
     div.innerHTML = `
       <div class="msg-header">
         <div>
           <div class="title">${m.title || "無題"}</div>
           <div class="meta">
-            ${m.publicId}
-            • ${new Date(m.time).toLocaleString()}
+            ${m.publicId} • ${new Date(m.time).toLocaleString()}
           </div>
         </div>
 
-        <button class="delBtn" onclick="del('${id}')">
-          削除
-        </button>
+        ${canDelete ? `<button class="delBtn" onclick="del('${id}')">削除</button>` : ""}
       </div>
 
       <div class="msg-body">${m.text || ""}</div>
@@ -218,10 +217,8 @@ onValue(chatRef, (snap)=>{
   render(snap.val());
 });
 
-/* ================= SEND ================= */
+/* ================= SEND（誰でもOK） ================= */
 window.send = () => {
-  if (!authUid) return;
-
   const title = document.getElementById("title").value;
   const text = document.getElementById("text").value;
 
@@ -231,7 +228,7 @@ window.send = () => {
     title: title || "無題",
     text,
     time: Date.now(),
-    authUid,
+    authUid,      // 削除判定用
     publicId,
     collapsed: true
   });
@@ -240,10 +237,11 @@ window.send = () => {
   document.getElementById("text").value = "";
 };
 
-/* ================= DELETE ================= */
+/* ================= DELETE（自分のみ） ================= */
 window.del = (id) => {
   remove(ref(db, `chat/messages/${id}`));
 };
+
 </script>
 
 </body>
